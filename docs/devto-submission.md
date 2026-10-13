@@ -97,6 +97,18 @@ Third, openness is what let me build around the model's *real* limits instead of
 
 Where the open approach beat a closed one: a hosted model would have cost more per scan than the tool is worth, and would have forced my fetch logic behind an API I couldn't inspect. The open-weight model made a cheap, private, inspectable tool possible — which is the only version of this that works as a hustle.
 
+## My Agent Session
+
+ClaimScout was built *inside* an agent session — an AI coding agent driving the terminal, running the real toolchain, and iterating against live output. That's fitting, because the tool is itself about making agent-assisted open-source work reliable.
+
+The session is where several of the design decisions were forced into the open rather than guessed at:
+
+- **The model returned Python code instead of JSON** on the first live ranker test. I caught it, added code-fence stripping, prose-array extraction, and a strict retry — then wrote a test for each failure mode. A closed API would have hidden that until production.
+- **The `amix` of 16 delayed narration clips collapsed to ~0s** because `amix` truncates to the shortest stream. Fixed by padding each clip with `apad` to the full timeline.
+- **edge-tts silently dropped a line** (0-byte file) twice — fixed with retries, which is now why the voiceover generator re-attempts.
+
+The honest thread through all of it: build around what the open model *actually* does, verified by running it, not what the demo says it should do. That's the same principle ClaimScout encodes in its architecture.
+
 ## My First User
 
 Me — and it paid off concretely.
