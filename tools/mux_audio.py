@@ -115,7 +115,7 @@ def main():
     p = argparse.ArgumentParser()
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     p.add_argument("--video", default=os.path.join(here, "demo.mp4"))
-    p.add_argument("--vo-dir", default=os.path.join(here, "tools", "voiceover"))
+    p.add_argument("--vo-dir", default=os.path.join(here, "tools", "voiceover_ava"))
     p.add_argument("--out", default=os.path.join(here, "demo-final.mp4"))
     p.add_argument("--rate", default="1.14",
                    help="atempo for narration (>1 = faster); narration is ~4.5s long")
