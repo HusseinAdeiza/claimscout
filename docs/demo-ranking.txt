@@ -1,0 +1,69 @@
+ 1. #287   [90] pushchain/push-chain-sdk
+      🐛 [BUG] - web2 reads warn about a Cookie header in warnings but emit n
+      Clear bug with reproduction instructions, matches contributor skills
+ 2. #283   [90] pushchain/push-chain-sdk
+      🐛 [BUG] - executeReads reports a batch as successful when a read ended
+      Clear bug with reproduction instructions, matches contributor skills
+ 3. #281   [90] pushchain/push-chain-sdk
+      🐛 [BUG] - A reverted origin-chain funds lock is reported as confirmed
+      Clear bug with reproduction instructions, matches contributor skills
+ 4. #279   [90] pushchain/push-chain-sdk
+      🐛 [BUG] - A reverted EVM fee-lock transaction is reported as confirmed
+      Clear bug with reproduction instructions, matches contributor skills
+ 5. #274   [90] pushchain/push-chain-sdk
+      🐛 [BUG] - MetaMask network switch adds the chain but never switches to
+      Clear bug with reproduction instructions, matches contributor skills
+ 6. #246   [80] pushchain/push-chain-sdk
+      Native token transfers incorrectly include ERC-20 call in multicall pa
+      Clear bug, matches contributor skills
+ 7. #705   [70] 0dotxyz/marginfi-v2
+      Same-asset-emode weight inversion
+      Bounded bug, but unclear reproduction instructions
+ 8. #701   [60] 0dotxyz/marginfi-v2
+      Liquidation interplay with Order tagging
+      Bounded bug, but unclear reproduction instructions and low priority
+ 9. #682   [50] 0dotxyz/marginfi-v2
+      Allow empty-but-active integration balances to close
+      Bounded bug, good first issue, but unclear reproduction instructions
+10. #679   [40] 0dotxyz/marginfi-v2
+      Configurable Confidence for Scope
+      Good first issue, but unclear reproduction instructions and low priority
+11. #630   [30] 0dotxyz/marginfi-v2
+      LST/SOL instant native unwind
+      Vague enhancement request
+12. #556   [20] 0dotxyz/marginfi-v2
+      Pause delegate admin
+      Low priority
+13. #455   [20] 0dotxyz/marginfi-v2
+      close obligations for integration banks
+      Low priority
+14. #425   [20] 0dotxyz/marginfi-v2
+      Fuzz suite also creates Fixed-Price banks
+      Low priority
+15. #699   [10] 0dotxyz/marginfi-v2
+      Determine what to do with CB and PT/Kamino emergency interplay
+      Unclear issue description and no labels matching contributor skills
+16. #630   [0] 0dotxyz/marginfi-v2
+      LST/SOL instant native unwind
+      No labels matching contributor skills and unclear issue description
+17. #238   [0] pushchain/push-chain-sdk
+      😈 [Improvement Proposal] - Proposal: Official Docker Image for Push Ch
+      Improvement proposal, not a bug or enhancement request
+18. #679   [0] 0dotxyz/marginfi-v2
+      Configurable Confidence for Scope
+      Good first issue, but unclear reproduction instructions and low priority
+19. #682   [0] 0dotxyz/marginfi-v2
+      Allow empty-but-active integration balances to close
+      Good first issue, but unclear reproduction instructions
+20. #701   [0] 0dotxyz/marginfi-v2
+      Liquidation interplay with Order tagging
+      Good first issue, but unclear reproduction instructions and low priority
+21. #679   [0] 0dotxyz/marginfi-v2
+      Configurable Confidence for Scope
+      Good first issue, but unclear reproduction instructions and low priority
+22. #682   [0] 0dotxyz/marginfi-v2
+      Allow empty-but-active integration balances to close
+      Good first issue, but unclear reproduction instructions
+23. #701   [0] 0dotxyz/marginfi-v2
+      Liquidation interplay with Order tagging
+      Good first issue, but unclear reproduction instructions and low priority

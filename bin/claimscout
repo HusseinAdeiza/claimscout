@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# ClaimScout CLI entrypoint. Thin wrapper around lib/claimscout.py so the tool
+# can be run as `./bin/claimscout` from a checkout without installation.
+here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+exec python3 "$here/lib/claimscout.py" "$@"

@@ -1,0 +1,16 @@
+# Example repo list for `claimscout scan --repos-file`.
+# One owner/repo per line. Lines starting with # are ignored.
+#
+# These are real repos with active, claimable issue traffic — swap in your own.
+
+# Rust / Anchor programs
+0dotxyz/marginfi-v2
+
+# TypeScript / JS SDKs
+pushchain/push-chain-sdk
+
+# Go / cosmos
+cosmos/cosmos-sdk
+
+# Rust / cardano
+IntersectMBO/mithril
