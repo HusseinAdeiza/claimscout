@@ -46,17 +46,22 @@ def font(kind: str, size: int) -> ImageFont.FreeTypeFont:
     return _font_cache[key]
 
 
-# ---------------------------------------------------------------- palette (dark terminal theme)
-BG = (13, 17, 23)
-BG_SOFT = (22, 27, 34)
-FG = (230, 237, 243)
-DIM = (139, 148, 158)
-GREEN = (63, 185, 80)
-CYAN = (88, 166, 255)
-YELLOW = (210, 168, 255)
-ORANGE = (255, 166, 87)
-RED = (248, 81, 73)
-PURPLE = (188, 140, 255)
+# ---------------------------------------------------------------- palette
+# Style matched to the reference (Elitr / BNB Hack): stark flat BLACK, ONE sparing
+# warm-yellow accent, monospace metadata, big bold numerals, generous negative
+# space. The polish is restraint + hierarchy, not glow or gradients.
+BG = (0, 0, 0)            # true black, as the reference uses
+BG_SOFT = (10, 10, 11)    # barely-lifted panel
+PANEL = (16, 16, 18)
+FG = (245, 245, 245)      # near-white
+DIM = (130, 130, 135)     # muted metadata grey
+ACCENT = (250, 204, 21)   # the single brand yellow (reference's signature)
+GREEN = (74, 222, 128)
+CYAN = (96, 165, 250)
+ORANGE = (251, 146, 60)
+RED = (239, 68, 68)
+PURPLE = (167, 139, 250)
+YELLOW = ACCENT  # backward-compat alias; the reference has one yellow accent
 WHITE = (255, 255, 255)
 
 
@@ -81,6 +86,60 @@ def lerp(a, b, t):
     return a + (b - a) * t
 
 
+def ease_out_back(t: float) -> float:
+    """Springy overshoot — the easing that makes motion feel 'expensive'."""
+    c1, c3 = 1.70158, 2.70158
+    return 1 + c3 * (t - 1) ** 3 + c1 * (t - 1) ** 2
+
+
+# ---------------------------------------------------------------- luxury FX layer
+def gradient_backdrop(w, h, t, top=(16, 20, 32), bottom=(8, 10, 18)):
+    """A slowly drifting vertical gradient — depth instead of a flat fill.
+
+    Built as a 1-pixel-wide column then resized, which is far faster than a
+    per-pixel Python loop over the full frame.
+    """
+    shift = (math.sin(t * 0.6) + 1) / 2  # 0..1 breathing centre
+    col = Image.new("RGB", (1, h))
+    cp = col.load()
+    for y in range(h):
+        f = (y / h + shift * 0.15) % 1.0
+        cp[0, y] = (
+            int(lerp(top[0], bottom[0], f)),
+            int(lerp(top[1], bottom[1], f)),
+            int(lerp(top[2], bottom[2], f)),
+        )
+    return col.resize((w, h))
+
+
+def add_glow(img, cx, cy, radius, color, strength=90):
+    """A soft radial glow composited additively — accent lighting."""
+    from PIL import ImageChops
+    glow = Image.new("RGB", img.size, (0, 0, 0))
+    gd = ImageDraw.Draw(glow)
+    steps = 24
+    for i in range(steps, 0, -1):
+        r = radius * i / steps
+        a = int(strength * (1 - i / steps) ** 2)
+        c = tuple(min(255, int(ch * a / 255)) for ch in color)
+        gd.ellipse([cx - r, cy - r, cx + r, cy + r], fill=c)
+    return ImageChops.add(img, glow)
+
+
+def vignette(img, strength=70):
+    """Darkened corners — focuses the eye, reads as cinematic."""
+    from PIL import ImageFilter
+    w, h = img.size
+    mask = Image.new("L", (w, h), 0)
+    md = ImageDraw.Draw(mask)
+    md.ellipse([-w * 0.25, -h * 0.25, w * 1.25, h * 1.25], fill=255)
+    mask = mask.filter(ImageFilter.GaussianBlur(120))
+    # invert-ish: keep centre, fade edges to black by `strength`
+    mask = mask.point(lambda p: int(255 - (255 - p) * strength / 255))
+    black = Image.new("RGB", (w, h), (0, 0, 0))
+    return Image.composite(img, black, mask)
+
+
 # ---------------------------------------------------------------- real demo data
 # Captured from actual `claimscout` runs (see docs/demo-ranking.txt).
 SCAN_LINES = [
@@ -103,79 +162,97 @@ def new_frame(w, h, color=BG):
     return img, ImageDraw.Draw(img)
 
 
-def terminal_chrome(img, draw, w, h, title="claimscout — zsh"):
-    """Draw a window with a title bar and three traffic-light dots."""
-    bar = 40
-    draw.rectangle([0, 0, w, bar], fill=BG_SOFT)
-    for i, c in enumerate((RED, YELLOW, GREEN)):
-        cx = 24 + i * 26
-        draw.ellipse([cx - 7, bar // 2 - 7, cx + 7, bar // 2 + 7], fill=c)
-    draw_text(draw, (w // 2, bar // 2), title, font("sans", 16), DIM, anchor="mm")
-    return bar
+def ref_chrome(draw, w, h, corner_tl="", corner_tr="", ticker=None):
+    """
+    Reference-style frame furniture:
+      - a thin accent rule across the very top
+      - small uppercase monospace metadata in the top-left / top-right
+      - an optional scrolling ticker along the bottom
+    No window chrome, no gradients — flat black, restrained.
+    """
+    # top accent rule
+    draw.rectangle([0, 0, w, 3], fill=ACCENT)
+    # corner metadata
+    if corner_tl:
+        draw_text(draw, (28, 26), corner_tl.upper(), font("mono", 15), DIM)
+    if corner_tr:
+        s = corner_tr.upper()
+        draw_text(draw, (w - 28, 26), s, font("mono", 15), DIM, anchor="ra")
+    if ticker:
+        draw_text(draw, (28, h - 30), ticker.upper(), font("mono", 14), DIM)
+    return 52  # content top margin
 
 
-def caption_bar(draw, w, h, text, color=CYAN):
+def brandmark(draw, w, h, label="CLAIMSCOUT"):
+    """Small brand lockup, bottom-right, as the reference places its logo."""
+    f = font("mono_bold", 16)
+    s = f"◆ {label}"
+    tw = text_w(draw, s, f)
+    draw_text(draw, (w - 28, h - 30), s, f, ACCENT, anchor="ra")
+
+
+def caption_bar(draw, w, h, text, color=ACCENT):
     """Bottom caption with a colored accent bar."""
     y = h - 64
     draw.rectangle([0, y, w, h], fill=BG_SOFT)
-    draw.rectangle([0, y, 8, h], fill=color)
-    draw_text(draw, (28, y + 32), text, font("sans_bold", 24), FG, anchor="lm")
+    draw.rectangle([0, y, 6, h], fill=color)
+    draw_text(draw, (24, y + 32), text, font("sans_bold", 22), FG, anchor="lm")
 
 
 # ================================================================ BEAT 1: friction
 def beat1(w, h, fps):
-    """Persona + high-stakes friction: a wall of dead-end issues."""
+    """Persona + high-stakes friction: a wall of dead-end issues (ref style)."""
     dur = 15
     n = dur * fps
     dead = [
-        ("#1042", "assigned to @someone", RED),
-        ("#1088", "23 comments — contested", ORANGE),
-        ("#1101", "epic · no owner · 4 months old", PURPLE),
+        ("#1042", "ASSIGNED", RED),
+        ("#1088", "23 COMMENTS — CONTESTED", ORANGE),
+        ("#1101", "EPIC · 4 MONTHS OLD", PURPLE),
     ]
     for f in range(n):
         t = f / n
         img, draw = new_frame(w, h)
-        bar = terminal_chrome(img, draw, w, h, "github.com — issues")
+        ref_chrome(draw, w, h, corner_tl="the issue tracker",
+                   corner_tr="40 open · 0 claimable")
 
-        # scrolling issue list (moves upward over time)
-        y = 70
-        scroll = int(t * 120)
-        for i in range(12):
+        # a sparse list of dead issues drifting up, monospace, muted
+        y = 90
+        for i in range(14):
             num = 1000 + i * 7
-            yy = y + i * 52 - scroll
-            if yy < bar + 10 or yy > h - 120:
+            yy = y + i * 40 - int(t * 90)
+            if yy < 60 or yy > h - 160:
                 continue
-            col = DIM if i % 2 else FG
-            draw_text(draw, (40, yy), f"#{num}", font("mono", 22), col)
-            draw_text(draw, (150, yy), "open issue title lorem ipsum dolor", font("mono", 20), DIM)
+            strike = i in (2, 5, 9)  # a few visually "struck out" as taken
+            col = DIM
+            draw_text(draw, (48, yy), f"#{num}", font("mono", 20), col)
+            title = "open issue — already someone else's"
+            draw_text(draw, (150, yy), title, font("mono", 18), (70, 70, 74))
 
-        # the dead-end callouts slam in during 0:06-0:12 (t 0.4-0.8)
+        # three big status stamps slam in (t 0.4-0.8), reference "big number" energy
         for j, (num, why, col) in enumerate(dead):
-            local = clamp((t - 0.4 - j * 0.13) / 0.12, 0, 1)
+            local = clamp((t - 0.42 - j * 0.12) / 0.12, 0, 1)
             if local <= 0:
                 continue
-            e = ease_out_cubic(local)
-            bx, by = 120, 300 + j * 96
-            # slide in from left
-            x = int(lerp(-360, bx, e))
-            draw.rounded_rectangle([x, by, x + 640, by + 76], radius=12,
-                                   fill=BG_SOFT, outline=col, width=3)
-            draw_text(draw, (x + 20, by + 24), num, font("mono_bold", 24), col)
-            draw_text(draw, (x + 130, by + 27), why, font("mono", 20), FG)
+            e = ease_out_back(local)
+            bx, by = 90, 300 + j * 110
+            x = int(lerp(-500, bx, e))
+            draw.rectangle([x, by, x + 7, by + 84], fill=col)  # accent tick
+            draw_text(draw, (x + 26, by + 2), num, font("mono_bold", 46), FG)
+            draw_text(draw, (x + 28, by + 56), why, font("mono", 18), col)
 
-        # final text slam "Sound familiar?" at the very end
-        slam = clamp((t - 0.86) / 0.1, 0, 1)
+        # final statement
+        slam = clamp((t - 0.85) / 0.1, 0, 1)
         if slam > 0:
             e = ease_out_cubic(slam)
-            size = int(lerp(70, 58, e))
-            draw_text(draw, (w // 2, h // 2), "Sound familiar?",
-                      font("sans_bold", size), WHITE, anchor="mm")
+            draw_text(draw, (w // 2, h // 2 + 40), "Sound familiar?",
+                      font("sans_bold", int(lerp(72, 60, e))), WHITE, anchor="mm")
+        brandmark(draw, w, h)
         yield img
 
 
 # ================================================================ BEAT 2: reveal
 def beat2(w, h, fps):
-    """Clean terminal, logo types on, one command types out."""
+    """The reveal: flat black, big wordmark, one command (ref style)."""
     dur = 10
     n = dur * fps
     logo = "ClaimScout"
@@ -183,87 +260,84 @@ def beat2(w, h, fps):
     for f in range(n):
         t = f / n
         img, draw = new_frame(w, h)
-        bar = terminal_chrome(img, draw, w, h)
-        # logo types in 0-0.4
-        shown = logo[: int(len(logo) * clamp(t / 0.4, 0, 1))]
-        lf = font("sans_bold", 54)
+        ref_chrome(draw, w, h, corner_tl="claimscout", corner_tr="v1.0")
+        # wordmark springs in
+        local = clamp(t / 0.35, 0, 1)
+        e = ease_out_back(local)
+        lf = font("sans_bold", int(lerp(40, 84, e)))
+        s = logo[: int(len(logo) * clamp(t / 0.4, 0, 1))]
         lw = text_w(draw, logo, lf)
-        draw_text(draw, (w // 2 - lw / 2, 200), shown, lf, GREEN)
-        # blinking cursor after logo
-        if t > 0.4 and int(t * 2) % 2 == 0:
-            draw.rectangle([w // 2 + lw / 2 + 4, 168, w // 2 + lw / 2 + 18, 218], fill=GREEN)
-        # command types in 0.45-0.8
+        draw_text(draw, (w // 2 - lw / 2, 250), s, lf, FG)
+        # accent underline grows beneath the wordmark
+        uw = int(lerp(0, lw, clamp((t - 0.35) / 0.25, 0, 1)))
+        if uw > 2:
+            draw.rectangle([w // 2 - lw / 2, 250 + 96, w // 2 - lw / 2 + uw, 250 + 100],
+                           fill=ACCENT)
+        # the command, monospace, lower third
         if t > 0.45:
             cs = cmd[: int(len(cmd) * clamp((t - 0.45) / 0.35, 0, 1))]
-            draw_text(draw, (60, 340), "$ " + cs, font("mono", 26), FG)
-        # tagline overlay at end
-        if t > 0.82:
-            draw_text(draw, (w // 2, 470), "Only the issues worth your time.",
-                      font("sans", 26), CYAN, anchor="mm")
+            draw_text(draw, (90, 430), "$ " + cs, font("mono", 24), FG)
+        # tagline
+        if t > 0.8:
+            draw_text(draw, (90, 500), "Only the issues worth your time.",
+                      font("sans", 24), DIM)
+        brandmark(draw, w, h)
         yield img
 
 
 # ================================================================ BEAT 3: live demo + aha
 def beat3(w, h, fps):
-    """Real scan output streams in; callouts; then the ranker and the aha."""
+    """Real scan output streams in; the aha is #682 -> #1 (ref style)."""
     dur = 25
     n = dur * fps
     for f in range(n):
         t = f / n
         img, draw = new_frame(w, h)
-        bar = terminal_chrome(img, draw, w, h, "claimscout scan")
+        ref_chrome(draw, w, h, corner_tl="claimscout scan",
+                   corner_tr="0dotxyz/marginfi-v2")
 
-        # --- scan output streams in during t 0 - 0.5
-        y = 70
+        # scan output, left-aligned monospace, tight hierarchy
+        y = 84
         for i, line in enumerate(SCAN_LINES):
-            appear = clamp((t - i * 0.06) / 0.05, 0, 1)
+            appear = clamp((t - i * 0.05) / 0.05, 0, 1)
             if appear <= 0:
                 continue
             if line[0] == "head":
-                draw_text(draw, (40, y), line[1], font("mono_bold", 22), FG)
+                draw_text(draw, (48, y), line[1], font("mono_bold", 22), FG)
             else:
                 _, num, meta, title, labels, col = line
-                draw_text(draw, (40, y), num, font("mono_bold", 22), col)
-                draw_text(draw, (140, y), meta, font("mono", 18), DIM)
-                draw_text(draw, (40, y + 26), title, font("mono", 20), FG)
-                draw_text(draw, (40, y + 50), f"labels: {labels}", font("mono", 16), col)
-            y += 92
+                draw_text(draw, (48, y), num, font("mono_bold", 24), col)
+                draw_text(draw, (150, y + 2), title, font("mono", 19), FG)
+                draw_text(draw, (150, y + 26), meta, font("mono", 14), DIM)
+                draw_text(draw, (48, y + 50), f"· {labels}", font("mono", 14), col)
+            y += 88
 
-        # --- callout 1 on #705 (t ~0.45), callout 2 on #682 (t ~0.58)
-        callouts = [
-            (0.45, 150, "#705", "unclaimed · 0 comments · labeled bug", CYAN),
-            (0.58, 150, "#682", "bounded · good first issue", GREEN),
-        ]
-        for start, yy, tag, why, col in callouts:
-            local = clamp((t - start) / 0.08, 0, 1)
-            if local <= 0:
-                continue
-            e = ease_out_cubic(local)
-            x = int(lerp(w, w - 470, e))
-            draw.rounded_rectangle([x, yy, x + 430, yy + 54], radius=10,
-                                   fill=(28, 40, 32), outline=col, width=2)
-            draw_text(draw, (x + 14, yy + 26), f"{tag}  {why}", font("mono", 16), col, anchor="lm")
+        # the aha panel on the right: the ranker result, #682 big at top
+        if t > 0.6:
+            px, py = 760, 84
+            e = ease_out_cubic(clamp((t - 0.6) / 0.2, 0, 1))
+            panel_h = int(lerp(0, 420, e))
+            draw.rectangle([px, py, px + 460, py + panel_h], fill=PANEL)
+            draw.rectangle([px, py, px + 460, py + 3], fill=ACCENT)
+            if panel_h > 120:
+                draw_text(draw, (px + 24, py + 22), "RANKED", font("mono", 14), DIM)
+                # #682 as the hero big number
+                draw_text(draw, (px + 24, py + 52), "#682", font("sans_bold", 64), GREEN)
+                draw_text(draw, (px + 230, py + 78), "[90]", font("mono_bold", 30), GREEN)
+                draw_text(draw, (px + 24, py + 128), "good first issue · bounded bug",
+                          font("mono", 15), DIM)
+                ry = py + 172
+                for rank, num, score, reason, col in RANK_LINES[1:]:
+                    draw_text(draw, (px + 24, ry), f"{rank} {num} [{score}]",
+                              font("mono", 18), col)
+                    draw_text(draw, (px + 24, ry + 22), reason[:40],
+                              font("mono", 13), (90, 90, 95))
+                    ry += 56
 
-        # --- the pipe + ranker appears at t 0.66
-        if t > 0.66:
-            draw_text(draw, (40, 470), "$ ... --json | claimscout-rank --profile rust,anchor",
-                      font("mono", 20), DIM)
-            ry = 510
-            for i, (rank, num, score, reason, col) in enumerate(RANK_LINES):
-                appear = clamp((t - 0.7 - i * 0.07) / 0.05, 0, 1)
-                if appear <= 0:
-                    continue
-                highlight = (i == 0)
-                if highlight and t > 0.86:
-                    # the aha: #682 pulses to #1
-                    pulse = 0.5 + 0.5 * math.sin(t * 10)
-                    col = tuple(int(lerp(c, 255, pulse * 0.3)) for c in GREEN)
-                draw_text(draw, (40, ry), f"{rank:>3} {num} [{score}]", font("mono_bold", 20), col)
-                draw_text(draw, (250, ry), reason[:58], font("mono", 16), DIM)
-                ry += 34
-
-        if t > 0.9:
+        # bottom caption lands the aha in words
+        if t > 0.88:
             caption_bar(draw, w, h, "Number one. Hers to take.", GREEN)
+        brandmark(draw, w, h)
         yield img
 
 
@@ -279,8 +353,9 @@ def beat4(w, h, fps):
     ]
     for f in range(n):
         t = f / n
-        img, draw = new_frame(w, h, BG_SOFT)
-        draw_text(draw, (w // 2, 60), "Under the hood", font("sans_bold", 30), FG, anchor="mm")
+        img, draw = new_frame(w, h)
+        ref_chrome(draw, w, h, corner_tl="under the hood", corner_tr="architecture")
+        draw_text(draw, (w // 2, 76), "Under the hood", font("sans_bold", 28), FG, anchor="mm")
 
         bw, bh, gap = 300, 150, 80
         total = 3 * bw + 2 * gap
@@ -323,14 +398,16 @@ def beat4(w, h, fps):
             cx, ccy = centers[idx]
             e = ease_out_cubic(local)
             r = int(lerp(0, 150, e))
-            draw.ellipse([cx - r, ccy - r, cx + r, ccy + r], outline=YELLOW, width=4)
-            draw_text(draw, (w // 2, h - 90), label, font("sans_bold", 24), YELLOW, anchor="mm")
+            draw.ellipse([cx - r, ccy - r, cx + r, ccy + r], outline=ACCENT, width=3)
+            draw_text(draw, (w // 2, h - 90), label, font("sans_bold", 22), FG, anchor="mm")
+        ref_chrome(draw, w, h, corner_tl="architecture", corner_tr="how it works")
+        brandmark(draw, w, h)
         yield img
 
 
 # ================================================================ BEAT 5: montage
 def beat5(w, h, fps):
-    """Three rapid imperative cuts + a three-up."""
+    """Three rapid imperative cuts + a three-up (ref style)."""
     dur = 10
     n = dur * fps
     cards = [
@@ -340,32 +417,35 @@ def beat5(w, h, fps):
     ]
     for f in range(n):
         t = f / n
-        img, draw = new_frame(w, h, BG_SOFT)
-        # three sequential full-bleed cards in the first 70%
+        img, draw = new_frame(w, h)
+        ref_chrome(draw, w, h, corner_tl="three ways to use it")
         if t < 0.7:
             idx = min(int(t / 0.233), 2)
             local = (t / 0.233) - idx
             title, cmd, col = cards[idx]
-            slide = ease_out_cubic(clamp(local / 0.15, 0, 1))
-            x = int(lerp(w, 0, slide))
-            draw.rectangle([0, 0, w, h], fill=BG)
-            draw.rectangle([0, h // 2 - 90, w, h // 2 + 90], fill=BG_SOFT)
-            draw_text(draw, (x + 80, h // 2 - 40), title, font("sans_bold", 52), col)
-            draw_text(draw, (x + 80, h // 2 + 30), cmd, font("mono", 24), DIM)
+            e = ease_out_back(clamp(local / 0.18, 0, 1))
+            x = int(lerp(w, 0, e))
+            draw.rectangle([x, h // 2 - 70, x + 8, h // 2 + 70], fill=col)
+            draw_text(draw, (x + 34, h // 2 - 56), title, font("sans_bold", 56), FG)
+            draw_text(draw, (x + 36, h // 2 + 22), cmd, font("mono", 20), DIM)
         else:
-            # three-up split
             local = clamp((t - 0.7) / 0.15, 0, 1)
             e = ease_out_cubic(local)
             pw = w // 3
+            top, bot = 140, h - 140
             for i, (title, cmd, col) in enumerate(cards):
                 x = i * pw
-                inset = int(lerp(20, 4, e))
-                draw.rectangle([x + inset, inset, x + pw - inset, h - inset],
-                               fill=BG, outline=col, width=2)
-                draw_text(draw, (x + pw // 2, h // 2 - 20), title,
-                          font("sans_bold", 22), col, anchor="mm")
-                draw_text(draw, (x + pw // 2, h // 2 + 24), cmd[:22],
+                inset = int(lerp(24, 6, e))
+                if bot <= top + 20:  # guard tiny canvases
+                    top, bot = 40, h - 40
+                draw.rectangle([x + inset, top, x + pw - inset, bot], fill=PANEL)
+                draw.rectangle([x + inset, top, x + pw - inset, top + 3], fill=col)
+                mid = (top + bot) // 2
+                draw_text(draw, (x + pw // 2, mid - 30), title,
+                          font("sans_bold", 22), FG, anchor="mm")
+                draw_text(draw, (x + pw // 2, mid + 14), cmd[:24],
                           font("mono", 13), DIM, anchor="mm")
+        brandmark(draw, w, h)
         yield img
 
 
@@ -379,39 +459,39 @@ def beat6(w, h, fps):
         img, draw = new_frame(w, h)
 
         if t < 0.45:
-            # a merged PR page (real: genvm-manager #48)
-            bar = terminal_chrome(img, draw, w, h, "github.com — pull request")
-            draw_text(draw, (40, 70), "fix(manager): report a spawned run as finished",
-                      font("sans_bold", 24), FG)
-            # the green Merged badge
-            bx, by = 40, 120
-            draw.rounded_rectangle([bx, by, bx + 150, by + 44], radius=22, fill=PURPLE)
-            draw_text(draw, (bx + 75, by + 22), "Merged", font("sans_bold", 22), WHITE, anchor="mm")
-            draw_text(draw, (bx + 170, by + 22), "genlayerlabs/genvm-manager #48",
-                      font("mono", 18), DIM, anchor="lm")
-            draw_text(draw, (40, 200), "+82  −1   2 files   all checks passed",
-                      font("mono", 18), GREEN)
-            # a subtle confetti burst after the badge lands
-            if t > 0.2:
-                for i in range(24):
-                    ang = i * (math.pi * 2 / 24)
-                    dist = 120 + (t - 0.2) * 900
-                    cx = bx + 75 + math.cos(ang) * dist
-                    cy = by + 22 + math.sin(ang) * dist * 0.7
-                    col = [GREEN, CYAN, YELLOW, PURPLE][i % 4]
-                    draw.ellipse([cx - 4, cy - 4, cx + 4, cy + 4], fill=col)
+            # the merged PR, reference treatment: flat black, metadata top,
+            # big "MERGED" statement, real repo + PR number
+            ref_chrome(draw, w, h, corner_tl="pull request",
+                       corner_tr="genvm-manager")
+            draw_text(draw, (48, 90), "fix(manager): report a spawned run as finished",
+                      font("sans_bold", 22), FG)
+            draw_text(draw, (48, 150), "MERGED", font("sans_bold", 76), GREEN)
+            draw_text(draw, (48, 250), "#48   +82  -1   2 files   all checks passed",
+                      font("mono", 20), DIM)
+            draw_text(draw, (48, 286), "genlayerlabs/genvm-manager",
+                      font("mono", 16), DIM)
+            if t > 0.18:
+                for i in range(20):
+                    ang = i * (math.pi * 2 / 20)
+                    dist = 100 + (t - 0.18) * 1100
+                    cx = 150 + math.cos(ang) * dist
+                    cy = 190 + math.sin(ang) * dist * 0.6
+                    col = [GREEN, ACCENT, CYAN, PURPLE][i % 4]
+                    draw.ellipse([cx - 3, cy - 3, cx + 3, cy + 3], fill=col)
+            brandmark(draw, w, h)
         else:
-            # logo + tagline card on black
             local = clamp((t - 0.45) / 0.2, 0, 1)
-            e = ease_out_cubic(local)
-            lf = font("sans_bold", int(lerp(40, 72, e)))
+            e = ease_out_back(local)
+            lf = font("sans_bold", int(lerp(40, 80, e)))
             logo = "ClaimScout"
             lw = text_w(draw, logo, lf)
-            draw_text(draw, (w // 2 - lw / 2, h // 2 - 60), logo, lf, GREEN)
+            draw_text(draw, (w // 2 - lw / 2, h // 2 - 70), logo, lf, FG)
+            draw.rectangle([w // 2 - lw / 2, h // 2 + 30, w // 2 + lw / 2, h // 2 + 34],
+                           fill=ACCENT)
             if t > 0.62:
                 tl = "Claim what's yours."
-                tlw = text_w(draw, tl, font("sans", 30))
-                draw_text(draw, (w // 2 - tlw / 2, h // 2 + 30), tl, font("sans", 30), FG)
+                tlw = text_w(draw, tl, font("sans", 28))
+                draw_text(draw, (w // 2 - tlw / 2, h // 2 + 70), tl, font("sans", 28), DIM)
         yield img
 
 
