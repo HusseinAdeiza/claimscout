@@ -116,7 +116,3 @@ Me — and it paid off concretely.
 I built ClaimScout to solve my own Hacktoberfest problem, then used it the same week. It surfaced `marginfi-v2` #682 (a stuck integration-balance bug) and #705 (a same-asset e-mode weight inversion). I opened PRs for both. Earlier in the session, the same fetch-and-filter approach caught a cosmos-sdk PR getting closed by a maintainer — the kind of signal you only get if something is watching your PRs, not just the issue board.
 
 The first "user" is a developer who'd been burned by claimed-and-gone issues, and what they asked for next was exactly what I built: *just tell me which ones are actually mine.*
-
-## Prize Categories
-
-- Best Use of Gemma (open-weight model at the core — genuinely, not bolted on)
